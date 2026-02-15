@@ -54,7 +54,19 @@ def prepare_features_target(df):
 
     return X, y
 
+def split_data(X, y, test_size=0.2, random_state=43):
+    """Split train/validation"""
 
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=test_size, random_state=random_state, shuffle=True
+    )
+
+    logger.info(f"Train set: {X_train.shape[0]} samples ({(1-test_size)*100:.0f}%)")
+    logger.info(f"Validation set: {X_val.shape[0]} samples ({test_size*100:.0f}%)")
+    logger.info(f"Train target - mean: ${y_train.mean():,.2f}, std: ${y_train.std():,.2f}")
+    logger.info(f"Val target - mean: ${y_val.mean():,.2f}, std: ${y_val.std():,.2f}")
+
+    return X_train, X_val, y_train, y_val
 
 def main():
     """Función principal para ejecutar el proceso de entrenamiento."""
@@ -73,7 +85,14 @@ def main():
         logger.info("Preparando features y target...")
         X, y = prepare_features_target(df)
         
+        # Paso 4: Split train/validation
+        logger.info("Dividiendo datos en train y validation...")
+        X_train, X_val, y_train, y_val = split_data(X, y)
+        
+        
         return True
+    
+    
     except Exception as e:
         logger.error(f"\nError en el proceso de entrenamiento: {str(e)}", exc_info=True)
         sys.exit(1)
