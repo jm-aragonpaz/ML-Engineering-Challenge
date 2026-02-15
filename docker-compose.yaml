@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: metlife_postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: metlife_db
+      POSTGRES_USER: metlife_user
+      POSTGRES_PASSWORD: metlife_pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metlife_user -d metlife_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - metlife_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  metlife_network:
+    driver: bridge
