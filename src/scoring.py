@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 from datetime import datetime
-from utils import get_db_engine
+from utils import get_db_engine, feature_engineering, transform_target
 
 """Pipeline de scroring para el proyecto."""
 
@@ -70,7 +70,7 @@ def load_training_model(model_path='models/best_model.pkl'):
     return model
 
 def generate_predictions(model,df):
-    """Genera predicciones sobre datos de scoring"""
+    """Genera predicciones sobre datos de scoring con Transformaciones iguales a las de training"""
     
     logger.info("Generando predicciones con el modelo cargado.")
     
@@ -85,10 +85,24 @@ def generate_predictions(model,df):
     columns_to_drop=['id','charges', 'created_at']
     df_features=df.drop([col for col in columns_to_drop if col in df.columns], axis=1)
     
-    logger.info(f"Columnas usadas para predicciones: {df_features.columns.tolist()}")
+    logger.info(f"Features originales: {df_features.columns.tolist()}")
     
-    #predecir charges con el modelo
-    predictions=model.predict(df_features)
+    logger.info("Aplicando feature engineering a los datos de scoring.")
+    df_features=feature_engineering(df_features, is_training=False)
+    logger.info(f"Features después de feature engineering: {df_features.columns.tolist()}")
+    
+    #predictions log-transformadas, vuelvo a escala original después
+    predictions_log=model.predict(df_features)
+    #predictions con escala original
+    predictions=transform_target(predictions_log, inverse=True)
+    
+    #Info de las predicciones
+    logger.info(f"✓ Predicciones generadas para {len(predictions)} registros")
+    logger.info(f"  Predicciones (log): min={predictions_log.min():.3f}, max={predictions_log.max():.3f}")
+    logger.info(f"  Predicciones ($):   min=${predictions.min():,.2f}, max=${predictions.max():,.2f}")
+    
+    # #predecir charges con el modelo
+    # predictions=model.predict(df_features)
     logger.info("Predicciones generadas exitosamente.")
     
     #creo df con los resultados
