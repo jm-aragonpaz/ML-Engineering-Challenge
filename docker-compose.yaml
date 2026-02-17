@@ -27,6 +27,43 @@ services:
     networks:
       - metlife_network
 
+# ML Pipeline
+  ml_pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: metlife_ml_pipeline
+    restart: on-failure
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      # Database config
+      DB_HOST: postgres
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-metlife_db}
+      DB_USER: ${DB_USER:-metlife_user}
+      DB_PASSWORD: ${DB_PASSWORD:-metlife_pass}
+
+      # ML config
+      PYTHONUNBUFFERED: 1
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      HYPERPARAM_ITERATIONS: ${HYPERPARAM_ITERATIONS:-50}
+      CV_FOLDS: ${CV_FOLDS:-5}
+      SCORING_SAMPLE_SIZE: ${SCORING_SAMPLE_SIZE:-10}
+
+    volumes:
+      # Persistir outputs
+      - ./models:/app/models
+      - ./results:/app/results
+      - ./logs:/app/logs
+
+    networks:
+      - metlife_network
+
 volumes:
   postgres_data:
     driver: local
