@@ -65,16 +65,24 @@ def prepare_features_target(df):
 def split_data(X, y_transformed, y_original, test_size=0.2, random_state=43):
     """Split train/validation"""
 
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, shuffle=True
+    X_train, X_val, y_train_log, y_val_log, y_train_orig, y_val_orig = train_test_split(
+        X, y_transformed, y_original, test_size=test_size, random_state=random_state, shuffle=True
     )
 
     logger.info(f"Train set: {X_train.shape[0]} samples ({(1-test_size)*100:.0f}%)")
     logger.info(f"Validation set: {X_val.shape[0]} samples ({test_size*100:.0f}%)")
-    logger.info(f"Train target - mean: ${y_train.mean():,.2f}, std: ${y_train.std():,.2f}")
-    logger.info(f"Val target - mean: ${y_val.mean():,.2f}, std: ${y_val.std():,.2f}")
-
-    return X_train, X_val, y_train, y_val
+    
+    # Stats del target TRANSFORMADO (log)
+    logger.info(f"\nTarget TRANSFORMADO (log):")
+    logger.info(f"  Train - mean: {y_train_log.mean():.3f}, std: {y_train_log.std():.3f}")
+    logger.info(f"  Val   - mean: {y_val_log.mean():.3f}, std: {y_val_log.std():.3f}")
+    
+    # Stats del target ORIGINAL ($) - para referencia
+    logger.info(f"\nTarget ORIGINAL ($):")
+    logger.info(f"  Train - mean: ${y_train_orig.mean():,.2f}, std: ${y_train_orig.std():,.2f}")
+    logger.info(f"  Val   - mean: ${y_val_orig.mean():,.2f}, std: ${y_val_orig.std():,.2f}")
+    
+    return X_train, X_val, y_train_log, y_val_log, y_train_orig, y_val_orig
 
 def create_preprocessor():
     """Pipeline de preprocesamiento de features"""
