@@ -43,7 +43,7 @@ def prepare_features_target(df):
 
     # Separar X e y
     X = df.drop('charges', axis=1)
-    y = np.log1p(df['charges'])  # Log-transform para estabilizar varianza y mejorar performance del modelo
+    y = df['charges']
 
     logger.info(f"Features (X): {X.columns.tolist()}")
     logger.info(f"Target original(y): charges")
@@ -118,9 +118,9 @@ def define_hyperparameter_grid():
         # y en funcion de los resultados que vaya obteniendo con el grid inicial
         # 'model__subsample': [0.7, 0.8, 0.9, 1.0],
         # 'model__colsample_bytree': [0.7, 0.8, 0.9, 1.0],
-        'model__min_child_weight': [1, 3, 5],
+        # 'model__min_child_weight': [1, 3, 5],
         # 'model__gamma': [0, 0.1, 0.2],
-        # 'model__reg_alpha': [0, 0.1, 1],  # L1 regularization
+        'model__reg_alpha': [0, 0.1, 1],  # L1 regularization
         'model__reg_lambda': [1, 10, 100],  # L2 regularization
     }
 
@@ -151,7 +151,7 @@ def train_model(X_train, y_train):
     
     param_grid= define_hyperparameter_grid()
     n_iter=int(os.getenv('HIPERPARAM_ITERATIONS', 350))
-    cv_folds=int(os.getenv('CV_FOLDS', 3))
+    cv_folds=int(os.getenv('CV_FOLDS', 5))
     
     logger.info(f"Configuracion de busqueda:")
     logger.info(f"  - Metodo: RandomizedSearchCV")

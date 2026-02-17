@@ -120,6 +120,7 @@ def generate_predictions(model,df):
         'percentage_error': np.abs((actual_charges - predictions) / actual_charges) * 100,
         'prediction_time': datetime.now()
     })
+    
     return results_df
 
 def save_predictions_to_db(engine, results_df):
