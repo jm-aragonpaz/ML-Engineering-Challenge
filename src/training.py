@@ -13,7 +13,7 @@ import os
 import sys
 import json
 from datetime import datetime
-from utils import get_db_engine
+from utils import get_db_engine, feature_engineering, transform_target
 import shutil
 # Setup de logging
 logging.basicConfig(
@@ -35,7 +35,7 @@ def load_training_data(engine):
     return df
 
 def prepare_features_target(df):
-    """Separar features y target"""
+    """Separar features y target con transformaciones y agregado de variables para mejorar predicciones"""
 
     # Eliminar columnas no necesarias
     columns_to_drop = ['id', 'created_at']
@@ -46,32 +46,52 @@ def prepare_features_target(df):
     y = df['charges']
 
     logger.info(f"Features (X): {X.columns.tolist()}")
-    logger.info(f"Target (y): charges")
+    logger.info(f"Target original(y): charges")
     logger.info(f"  - Min: ${y.min():,.2f}")
     logger.info(f"  - Max: ${y.max():,.2f}")
     logger.info(f"  - Mean: ${y.mean():,.2f}")
     logger.info(f"  - Median: ${y.median():,.2f}")
+    logger.info(f"  - Skewness: {y.skew():.3f}")
 
-    return X, y
+    # Aplicar feature engineering
+    X = feature_engineering(X, is_training=True)
 
-def split_data(X, y, test_size=0.2, random_state=43):
+    # Aplicar transform de target
+    y_original=y.copy()
+    y_transformed = transform_target(y, inverse=False)
+
+    return X, y_transformed, y_original
+
+def split_data(X, y_transformed, y_original, test_size=0.2, random_state=43):
     """Split train/validation"""
 
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=test_size, random_state=random_state, shuffle=True
+    X_train, X_val, y_train_log, y_val_log, y_train_orig, y_val_orig = train_test_split(
+        X, y_transformed, y_original, test_size=test_size, random_state=random_state, shuffle=True
     )
 
     logger.info(f"Train set: {X_train.shape[0]} samples ({(1-test_size)*100:.0f}%)")
     logger.info(f"Validation set: {X_val.shape[0]} samples ({test_size*100:.0f}%)")
-    logger.info(f"Train target - mean: ${y_train.mean():,.2f}, std: ${y_train.std():,.2f}")
-    logger.info(f"Val target - mean: ${y_val.mean():,.2f}, std: ${y_val.std():,.2f}")
-
-    return X_train, X_val, y_train, y_val
+    
+    # Stats del target TRANSFORMADO (log)
+    logger.info(f"\nTarget TRANSFORMADO (log):")
+    logger.info(f"  Train - mean: {y_train_log.mean():.3f}, std: {y_train_log.std():.3f}")
+    logger.info(f"  Val   - mean: {y_val_log.mean():.3f}, std: {y_val_log.std():.3f}")
+    
+    # Stats del target ORIGINAL ($) - para referencia
+    logger.info(f"\nTarget ORIGINAL ($):")
+    logger.info(f"  Train - mean: ${y_train_orig.mean():,.2f}, std: ${y_train_orig.std():,.2f}")
+    logger.info(f"  Val   - mean: ${y_val_orig.mean():,.2f}, std: ${y_val_orig.std():,.2f}")
+    
+    return X_train, X_val, y_train_log, y_val_log, y_train_orig, y_val_orig
 
 def create_preprocessor():
     """Pipeline de preprocesamiento de features"""
     categorical_features = ['sex', 'smoker', 'region']
-    numerical_features = ['age', 'bmi', 'children']
+    numerical_features = ['age', 'bmi', 'children',
+                        'bmi_smoker', 'age_smoker',
+                        'bmi_squared', 'age_squared',
+                        'bmi_obese', 'age_senior'
+                        ]
     
     preprocessor= ColumnTransformer(
         transformers=[
@@ -100,8 +120,8 @@ def define_hyperparameter_grid():
         # 'model__colsample_bytree': [0.7, 0.8, 0.9, 1.0],
         # 'model__min_child_weight': [1, 3, 5],
         # 'model__gamma': [0, 0.1, 0.2],
-        # 'model__reg_alpha': [0, 0.1, 1],  # L1 regularization
-        # 'model__reg_lambda': [1, 10, 100],  # L2 regularization
+        'model__reg_alpha': [0, 0.1, 1],  # L1 regularization
+        'model__reg_lambda': [1, 10, 100],  # L2 regularization
     }
 
     total_combinations = np.prod([len(v) for v in param_distributions.values()])
@@ -130,7 +150,7 @@ def train_model(X_train, y_train):
     ])
     
     param_grid= define_hyperparameter_grid()
-    n_iter=int(os.getenv('HIPERPARAM_ITERATIONS', 50))
+    n_iter=int(os.getenv('HIPERPARAM_ITERATIONS', 350))
     cv_folds=int(os.getenv('CV_FOLDS', 5))
     
     logger.info(f"Configuracion de busqueda:")
@@ -164,26 +184,50 @@ def train_model(X_train, y_train):
     
     return random_search.best_estimator_,random_search
 
-def evaluate_model(model, X_train, y_train, X_val, y_val):
-    """Evaluar modelo con el set de validacion"""
+def evaluate_model(model, X_train, y_train, X_val, y_val, y_train_original, y_val_original):
+    """Evaluar modelo con el set de validacion con y cin transformacion del target
+    
+    Args:
+        model: Modelo entrenado
+        X_train, y_train: Datos de entrenamiento (y_train en escala LOG)
+        X_val, y_val: Datos de validación (y_val en escala LOG)
+        y_train_original, y_val_original: Target en escala ORIGINAL ($$)
+    """
     logger.info("EVALUACIÓN DEL MODELO")
     
-    #predicciones
-    y_train_pred = model.predict(X_train)
-    y_val_pred = model.predict(X_val)
+    #predicciones con escala log
+    y_train_pred_log = model.predict(X_train)
+    y_val_pred_log = model.predict(X_val)
     
-    def calculate_metrics(y_true, y_pred, dataset_name):
-        rmse = root_mean_squared_error(y_true, y_pred)
-        mae = mean_absolute_error(y_true, y_pred)
-        r2 = r2_score(y_true, y_pred)
-        mape= np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+    #predicciones con escala original
+    y_train_pred = transform_target(y_train_pred_log, inverse=True)
+    y_val_pred = transform_target(y_val_pred_log, inverse=True)
+    
+    #Calculo metricas en las dos escalas
+    def calculate_metrics(y_true_log, y_pred_log, y_true_original, y_pred_original, dataset_name):
+        
+        #Metricas log para verificar ajuste
+        rmse_log = root_mean_squared_error(y_true_log, y_pred_log)
+        mae_log = mean_absolute_error(y_true_log, y_pred_log)
+        r2_log = r2_score(y_true_log, y_pred_log)
+        mape_log= np.mean(np.abs((y_true_original - y_pred_original) / y_true_original)) * 100
+        
+        #Metricas originales, las que me importan
+        rmse = root_mean_squared_error(y_true_original, y_pred_original)
+        mae = mean_absolute_error(y_true_original, y_pred_original)
+        r2 = r2_score(y_true_original, y_pred_original)
+        mape = np.mean(np.abs((y_true_original - y_pred_original) / y_true_original)) * 100
+        
         
         # Adjusted R² (penaliza complejidad del modelo)
-        n = len(y_true)
+        n = len(y_true_original)
         p = X_train.shape[1]
         adj_r2 = 1 - (1 - r2) * (n - 1) / (n - p - 1)
 
         metrics = {
+            'rmse_log': rmse_log,
+            'mae_log': mae_log,
+            'r2_log': r2_log,
             'rmse': rmse,
             'mae': mae,
             'r2': r2,
@@ -192,6 +236,11 @@ def evaluate_model(model, X_train, y_train, X_val, y_val):
         }
         
         logger.info(f" {dataset_name.upper()} SET:")
+        logger.info(f" Metricas en escala LOG (para diagnóstico de ajuste):")
+        logger.info(f"  RMSE (log):        ${rmse_log:,.2f}")
+        logger.info(f"  MAE (log):         ${mae_log:,.2f}")
+        logger.info(f"  R² (log):          {r2_log:.4f}")
+        logger.info(f"Metricas en escala original($):")
         logger.info(f"  RMSE:        ${rmse:,.2f}")
         logger.info(f"  MAE:         ${mae:,.2f}")
         logger.info(f"  R²:          {r2:.4f}")
@@ -200,8 +249,8 @@ def evaluate_model(model, X_train, y_train, X_val, y_val):
 
         return metrics
     
-    train_metrics = calculate_metrics(y_train, y_train_pred, "train")
-    val_metrics = calculate_metrics(y_val, y_val_pred, "validation")
+    train_metrics = calculate_metrics(y_train, y_train_pred_log, y_train_original, y_train_pred, "train")
+    val_metrics = calculate_metrics(y_val, y_val_pred_log, y_val_original, y_val_pred, "validation")
     
     #Analisis de overfitting
     r2_diff = train_metrics['r2'] - val_metrics['r2']
@@ -361,11 +410,11 @@ def main():
         
         # Paso 3: Preparar features y target
         logger.info("Preparando features y target...")
-        X, y = prepare_features_target(df)
+        X, y_transformed, y_original = prepare_features_target(df)
         
         # Paso 4: Split train/validation
         logger.info("Dividiendo datos en train y validation...")
-        X_train, X_val, y_train, y_val = split_data(X, y)
+        X_train, X_val, y_train, y_val, y_train_orig, y_val_orig = split_data(X, y_transformed, y_original, test_size=0.2, random_state=43)
         
         # Paso 5 beta
         preprocessor= create_preprocessor()
@@ -377,7 +426,7 @@ def main():
         
         # Paso 6: Evaluar modelo
         logger.info("Evaluando modelo en el set de validación...")
-        metrics, y_val_pred = evaluate_model(best_model, X_train, y_train, X_val, y_val)
+        metrics, y_val_pred = evaluate_model(best_model, X_train, y_train, X_val, y_val, y_train_orig, y_val_orig)
         
         # Paso 7: Guardar modelo y metadata y estadisticas de training
         logger.info("Guardando modelo y metadata...")
