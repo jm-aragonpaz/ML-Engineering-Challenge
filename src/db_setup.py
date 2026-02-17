@@ -142,6 +142,7 @@ def create_additional_tables(engine):
         create_predictions_table = text("""
             CREATE TABLE predictions (
                 id SERIAL PRIMARY KEY,
+                scoring_id INTEGER NOT NULL,
                 age INTEGER NOT NULL,
                 sex VARCHAR(10) NOT NULL,
                 bmi FLOAT NOT NULL,

@@ -93,7 +93,7 @@ def generate_predictions(model,df):
     
     #creo df con los resultados
     results_df=pd.DataFrame({
-        'id': ids,
+        'scoring_id': ids,
         'age': df['age'].values,
         'sex': df['sex'].values,
         'bmi': df['bmi'].values,
@@ -118,6 +118,7 @@ def save_predictions_to_db(engine, results_df):
         create_table_query = text("""
             CREATE TABLE IF NOT EXISTS predictions (
                 id SERIAL PRIMARY KEY,
+                scoring_id INTEGER,
                 age INTEGER NOT NULL,
                 sex VARCHAR(10) NOT NULL,
                 bmi FLOAT NOT NULL,
@@ -203,7 +204,7 @@ def evaluate_predictions(results_df):
     logger.info("\nCasos con mayor error:")
     for idx, row in worst_cases.iterrows():
         logger.info(
-            f"  ID {row['id']}: "
+            f"  ID {row['scoring_id']}: "
             f"Error=${row['absolute_error']:,.2f} "
             f"({row['percentage_error']:.1f}%) "
             f"- Smoker: {row['smoker']}, BMI: {row['bmi']}"
