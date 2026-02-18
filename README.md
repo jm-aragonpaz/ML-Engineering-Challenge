@@ -49,13 +49,19 @@ He seleccionado **XGBoost** como algoritmo principal por las siguientes razones:
 - **Random Forest**: Buen candidato, pero XGBoost generalmente supera en accuracy y velocidad
 - **Neural Networks**: Overkill para este tamaño de dataset; requiere más datos para evitar overfitting
 
-**Transformación del Target:**
+**Transformación de la Target:**
 
 Aplicamos `log1p(charges)` como variable objetivo porque:
 - La distribución original de `charges` tiene **skewness = 1.52** (fuertemente asimétrica)
 - La transformación logarítmica reduce skewness a **0.09**, aproximándose a normalidad
 - Esto estabiliza la varianza y mejora el ajuste del modelo en todo el rango de precios
 - Después de predecir, invertimos con `exp(pred) - 1` para volver a escala de dólares
+
+
+**Justificación de feature engineering aplicado**
+
+Se agregaron variables derivadas como bmi², age², bmi×smoker y age×smoker para capturar no linealidades e interacciones reales que no están representadas en las variables originales.
+Estas features permiten modelar efectos curvos y efectos condicionados (por ejemplo, que el impacto del BMI y la edad cambia en fumadores), mejorando la capacidad predictiva del modelo y su generalización sin aumentar excesivamente la complejidad.
 
 ---
 
@@ -110,7 +116,7 @@ metlife-insurance-prediction/
 
 ### **Requisitos Previos**
 
-- **Python**: 3.11+ (probado con 3.11.12)
+- **Python**: 3.10 (probado con 3.10.19)
 - **Docker**: 20.10+ (para ejecución containerizada)
 - **Git**: Para clonar el repositorio
 
